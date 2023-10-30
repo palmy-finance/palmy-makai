@@ -1,0 +1,48 @@
+{
+  "scripts": {
+    "deploy": "npx hardhat deploy --network hardhat",
+    "deploy:rinkeby": "cross-env NETWORK=rinkeby npx hardhat deploy --network rinkeby",
+    "deploy:shiden": "cross-env NETWORK=shiden npx hardhat deploy --network shiden",
+    "deploy:astar": "cross-env NETWORK=astar npx hardhat deploy --network astar",
+    "exec:looping": "cross-env NETWORK=astar npx hardhat run scripts/looping.ts --network astar",
+    "test": "npx hardhat test",
+    "prettier": "prettier --write 'contracts/**/*.sol'"
+  },
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.0.5",
+    "@nomiclabs/hardhat-waffle": "^2.0.3",
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^9.1.0",
+    "@types/node": "^17.0.21",
+    "chai": "^4.3.6",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.0.0",
+    "eslint": "^8.10.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-import": "^2.25.4",
+    "eslint-plugin-no-only-tests": "^2.6.0",
+    "eslint-plugin-prettier": "^4.0.0",
+    "ethereum-waffle": "^3.4.0",
+    "ethers": "^5.5.4",
+    "hardhat": "^2.9.1",
+    "hardhat-abi-exporter": "^2.8.0",
+    "hardhat-contract-sizer": "^2.5.0",
+    "hardhat-deploy": "^0.10.5",
+    "hardhat-deploy-ethers": "^0.3.0-beta.13",
+    "hardhat-gas-reporter": "^1.0.8",
+    "hardhat-typechain": "^0.3.5",
+    "node-fetch": "3",
+    "prettier": "^2.5.1",
+    "prettier-plugin-solidity": "^1.0.0-beta.19",
+    "solhint": "^3.3.7",
+    "solhint-plugin-prettier": "^0.0.5",
+    "ts-node": "^10.6.0",
+    "typescript": "^4.6.2"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.5.0",
+    "@starlay-finance/contract-helpers": "^0.0.10",
+    "bip39": "^3.0.4",
+    "ethereumjs-wallet": "^1.0.2"
+  }
+}
