@@ -2,34 +2,32 @@
 pragma solidity 0.8.10;
 
 import "./interfaces/IERC20.sol";
-import "./interfaces/IWASTR.sol";
+import "./interfaces/IWOAS.sol";
 import "./interfaces/ILendingPool.sol";
 import "./interfaces/IPriceOracleGetter.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
-contract Leverager {
+contract Leverager is Initializable {
 	uint16 internal constant LEVERAGE_CODE = 10;
 	uint256 internal constant LTV_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000; // prettier-ignore
 	uint256 internal constant LT_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000; // prettier-ignore
-	uint256 internal constant MAX_INT = 2**256 - 1;
+	uint256 internal constant MAX_INT = 2 ** 256 - 1;
 	uint256 internal constant ETH = 1 ether;
 	uint256 internal constant CLOSE_MAX_LOOPS = 40;
 
-	address public immutable lendingPool;
-	IWASTR public immutable wastr;
-	IPriceOracleGetter public immutable priceOracleGetter;
+	address public lendingPool;
+	IWOAS public woas;
+	IPriceOracleGetter public priceOracleGetter;
 
-	constructor(
+	function initialize(
 		address pool,
-		address _wastr,
+		address _woas,
 		address palmyOracle
-	) {
+	) external initializer {
 		lendingPool = pool;
-		wastr = IWASTR(_wastr);
+		woas = IWOAS(_woas);
 		priceOracleGetter = IPriceOracleGetter(palmyOracle);
 	}
-
-	// Fund native token to this contract for DOT.
-	function fund() external payable {}
 
 	/// @notice Loop the depositing and borrowing
 	/// @param asset The address of the target token
@@ -57,26 +55,26 @@ contract Leverager {
 		_loop(asset, amount, interestRateMode, borrowRatio, loopCount);
 	}
 
-	/// @notice Loop the depositing and borrowing on ASTR
+	/// @notice Loop the depositing and borrowing on OAS
 	/// @param interestRateMode The interest rate mode at which the user wants to borrow: 1 for Stable, 2 for Variable
 	/// @param borrowRatio the percentage of the usage of the borrowed amount
 	///                        e.g. 80% -> 8000
 	/// @param loopCount The looping count how many times to deposit
-	function loopASTR(
+	function loopOAS(
 		uint256 interestRateMode,
 		uint256 borrowRatio,
 		uint256 loopCount
 	) external payable {
-		uint256 _ltv = ltv(address(wastr));
+		uint256 _ltv = ltv(address(woas));
 		require(
 			borrowRatio > 0 && borrowRatio <= _ltv,
 			"Inappropriate borrow rate"
 		);
 		require(loopCount >= 2 && loopCount <= 40, "Inappropriate loop count");
 
-		wastr.approve(lendingPool, MAX_INT);
-		wastr.deposit{ value: msg.value }();
-		_loop(address(wastr), msg.value, interestRateMode, borrowRatio, loopCount);
+		woas.approve(lendingPool, MAX_INT);
+		woas.deposit{ value: msg.value }();
+		_loop(address(woas), msg.value, interestRateMode, borrowRatio, loopCount);
 	}
 
 	function getConfiguration(address asset) public view returns (uint256 data) {
@@ -92,13 +90,15 @@ contract Leverager {
 			ILendingPool(lendingPool).getReserveData(asset).variableDebtTokenAddress;
 	}
 
-	function getAvailableBorrows(address account)
+	function getAvailableBorrows(
+		address account
+	)
 		external
 		view
 		returns (
 			uint256 totalCollateral, // decimal 8
 			uint256 availableBorrows, // decimal 8
-			uint256 priceASTR, // decimal 8
+			uint256 priceOAS, // decimal 8
 			uint256 available,
 			uint256 _ltv,
 			uint256 hf // decimal 18
@@ -107,12 +107,15 @@ contract Leverager {
 		(totalCollateral, , availableBorrows, , _ltv, hf) = ILendingPool(
 			lendingPool
 		).getUserAccountData(account);
-		priceASTR = IPriceOracleGetter(0xbB5893E0f744b3d6305D49B1da6bc04fE922AC15)
-			.getAssetPrice(address(wastr));
-		available = availableBorrows * priceASTR;
+		priceOAS = IPriceOracleGetter(0xbB5893E0f744b3d6305D49B1da6bc04fE922AC15)
+			.getAssetPrice(address(woas));
+		available = availableBorrows * priceOAS;
 	}
 
-	function withdrawable(address account, address asset)
+	function withdrawable(
+		address account,
+		address asset
+	)
 		public
 		view
 		returns (
@@ -141,9 +144,9 @@ contract Leverager {
 			totalCollateral *
 			currentLiquidationThreshold -
 			totalDebt *
-			10**(4);
+			10 ** (4);
 		withdrawableCollateral =
-			((10**(decimal)) * afford) /
+			((10 ** (decimal)) * afford) /
 			(reserveUnitPrice * liqThreshold);
 		withdrawAmount = withdrawableCollateral;
 		uint256 healthFactor = getHealthFactor(account, asset, withdrawAmount);
@@ -177,7 +180,7 @@ contract Leverager {
 		uint256 totalCollateralAfter;
 		uint256 liquidationThresholdAfter;
 		uint256 amountETH;
-		amountETH = (withdrawAmount * reserveUnitPrice) / (10**decimal);
+		amountETH = (withdrawAmount * reserveUnitPrice) / (10 ** decimal);
 		totalCollateralAfter = (totalCollateral > amountETH)
 			? totalCollateral - amountETH
 			: 0;
@@ -222,11 +225,10 @@ contract Leverager {
 	 * @param percentage The percentage of the value to be calculated
 	 * @return The percentage of value
 	 **/
-	function percentMul(uint256 value, uint256 percentage)
-		internal
-		pure
-		returns (uint256)
-	{
+	function percentMul(
+		uint256 value,
+		uint256 percentage
+	) internal pure returns (uint256) {
 		uint256 PERCENTAGE_FACTOR = 1e4; //percentage plus two decimals
 		uint256 HALF_PERCENT = PERCENTAGE_FACTOR / 2;
 		if (value == 0 || percentage == 0) {
@@ -275,11 +277,10 @@ contract Leverager {
 		}
 	}
 
-	function withdrawableAmount(address user, address asset)
-		internal
-		view
-		returns (uint256)
-	{
+	function withdrawableAmount(
+		address user,
+		address asset
+	) internal view returns (uint256) {
 		(, , , , , uint256 withdrawAmount) = withdrawable(user, asset);
 		return withdrawAmount;
 	}
