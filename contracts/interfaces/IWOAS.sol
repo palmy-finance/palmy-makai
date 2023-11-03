@@ -1,6 +1,6 @@
 pragma solidity 0.8.10;
 
-interface IWASTR {
+interface IWOAS {
 	function deposit() external payable;
 
 	function withdraw(uint256) external;
