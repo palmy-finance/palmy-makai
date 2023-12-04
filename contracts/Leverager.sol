@@ -180,7 +180,7 @@ contract Leverager is Initializable {
 		uint256 totalCollateralAfter;
 		uint256 liquidationThresholdAfter;
 		uint256 amountETH;
-		amountETH = (withdrawAmount * reserveUnitPrice) / (10 ** decimal);
+		amountETH = (withdrawAmount * reserveUnitPrice);
 		totalCollateralAfter = (totalCollateral > amountETH)
 			? totalCollateral - amountETH
 			: 0;
@@ -188,13 +188,12 @@ contract Leverager is Initializable {
 		liquidationThresholdAfter = (totalCollateralAfter != 0 ||
 			(currentLiquidationThreshold *
 				totalCollateral -
-				liqThreshold *
-				amountETH) >=
+				(liqThreshold * amountETH) /
+				(10 ** decimal)) >=
 			0)
 			? (currentLiquidationThreshold *
 				totalCollateral -
-				liqThreshold *
-				amountETH) / totalCollateralAfter
+				((liqThreshold * amountETH) / (10 ** decimal))) / totalCollateralAfter
 			: 0;
 
 		healthFactor = wadDiv(
