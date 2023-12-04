@@ -1,11 +1,11 @@
 {
   "scripts": {
-    "deploy": "npx hardhat deploy --network hardhat",
+    "deploy": "npx hardhat compile && npx hardhat deploy --network hardhat",
     "deploy:rinkeby": "cross-env NETWORK=rinkeby npx hardhat deploy --network rinkeby",
     "deploy:shiden": "cross-env NETWORK=shiden npx hardhat deploy --network shiden",
     "deploy:astar": "cross-env NETWORK=astar npx hardhat deploy --network astar",
     "exec:looping": "cross-env NETWORK=astar npx hardhat run scripts/looping.ts --network astar",
-    "test": "npx hardhat test",
+    "test": "npx hardhat compile && npx hardhat test",
     "prettier": "prettier --write 'contracts/**/*.sol'"
   },
   "devDependencies": {
