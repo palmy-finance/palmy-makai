@@ -27,7 +27,7 @@ describe('leverager', async () => {
   let LV: Leverager
   let oracle: PriceOracle
   beforeEach(async () => {
-    const [dominator, user] = await ethers.getSigners()
+    const [, user] = await ethers.getSigners()
 
     usdc = await new Erc20Factory(user).deploy(
       'USDC',
@@ -111,14 +111,7 @@ describe('leverager', async () => {
       const [, user] = await ethers.getSigners()
       await usdc.connect(user).approve(LV.address, initial)
       await LV.connect(user).loop(usdc.address, initial, 2, 8000, 10)
-      // fund more 100 usdc
-      await usdc.connect(user).approve(LP.address, parseEther('600'))
-      await LP.connect(user).deposit(
-        usdc.address,
-        parseEther('600'),
-        await user.getAddress(),
-        0
-      )
+
       await LV.connect(user).close(usdc.address)
       //expect(await lUSDC.balanceOf(await user.getAddress())).to.be.equal(0)
       expect(await vdUSDC.balanceOf(await user.getAddress())).to.be.equal(0)

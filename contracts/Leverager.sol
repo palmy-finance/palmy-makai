@@ -13,7 +13,7 @@ contract Leverager is Initializable {
 	uint256 internal constant LT_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000; // prettier-ignore
 	uint256 internal constant MAX_INT = 2 ** 256 - 1;
 	uint256 internal constant ETH = 1 ether;
-	uint256 internal constant CLOSE_MAX_LOOPS = 10;
+	uint256 internal constant CLOSE_MAX_LOOPS = 40;
 
 	address public lendingPool;
 	IWOAS public woas;
@@ -175,7 +175,8 @@ contract Leverager is Initializable {
 		GetHealthFactorAfterWithdrawLocalVars memory vars,
 		uint256 withdrawAmount
 	) internal pure returns (uint256) {
-		uint256 amountETH = (withdrawAmount * vars.reserveUnitPrice);
+		uint256 amountETH = (withdrawAmount * vars.reserveUnitPrice) /
+			(10 ** (vars.decimals));
 		(
 			uint256 totalCollateralAfter,
 			uint256 liquidationThresholdAfter
@@ -183,8 +184,7 @@ contract Leverager is Initializable {
 				vars.totalCollateral,
 				amountETH,
 				vars.currentLiquidationThreshold,
-				vars.liqThreshold,
-				vars.decimals
+				vars.liqThreshold
 			);
 
 		return
@@ -238,8 +238,7 @@ contract Leverager is Initializable {
 		uint256 totalCol,
 		uint256 withdrawAmtEth,
 		uint256 currentUserLiqThreshold,
-		uint256 assetLiqThreshold,
-		uint8 reserveDecimal
+		uint256 assetLiqThreshold
 	)
 		internal
 		pure
@@ -249,15 +248,15 @@ contract Leverager is Initializable {
 			return (0, 0);
 		}
 		totalColAfterWithdraw = totalCol - withdrawAmtEth;
-		bool thresholdCrossed = currentUserLiqThreshold * totalColAfterWithdraw <=
-			(assetLiqThreshold * withdrawAmtEth) / (10 ** reserveDecimal);
+		bool thresholdCrossed = currentUserLiqThreshold * totalCol <=
+			assetLiqThreshold * withdrawAmtEth;
 		if (thresholdCrossed) {
 			return (totalColAfterWithdraw, 0);
 		}
 		uint256 numerator = currentUserLiqThreshold *
 			totalCol -
-			(assetLiqThreshold * withdrawAmtEth) /
-			(10 ** reserveDecimal);
+			assetLiqThreshold *
+			withdrawAmtEth;
 		uint256 denominator = totalColAfterWithdraw;
 
 		return (totalColAfterWithdraw, numerator / denominator);
