@@ -135,13 +135,13 @@ const depositExpected = (
   }
   const _f = (d: BigNumber) => d.mul(borrowRate).div(10000)
   let d = deposit
-  for (let j = 0; j < loop; j++) {
+  Array.from({ length: loop }).forEach(() => {
     d = _f(d)
-  }
+  })
   return d
 }
 
-// TODO: refactor redundant calculation
+// Note: refactor this redundant code
 const totalDepositExpected = (
   loop: number,
   deposit: BigNumber,

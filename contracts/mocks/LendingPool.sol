@@ -268,13 +268,19 @@ contract LendingPool is ILendingPool {
 				.balanceOf(user);
 			totalDebtETH += userDebtBalance;
 		}
+		currentLiquidationThreshold = totalCollateralETH == 0
+			? 0
+			: totalColWithLiqThreshold / totalCollateralETH;
+		healthFactor = totalDebtETH == 0
+			? type(uint256).max
+			: totalCollateralETH / totalDebtETH;
 		return (
 			totalCollateralETH,
 			totalDebtETH,
 			0,
-			totalColWithLiqThreshold / totalCollateralETH,
+			currentLiquidationThreshold,
 			0,
-			totalColWithLiqThreshold / totalDebtETH
+			healthFactor
 		);
 	}
 }
