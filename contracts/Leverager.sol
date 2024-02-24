@@ -43,16 +43,24 @@ contract Leverager is Initializable {
 		uint256 borrowRatio,
 		uint256 loopCount
 	) public {
+		_validateLoop(asset, borrowRatio, loopCount);
+
+		IERC20(asset).transferFrom(msg.sender, address(this), amount);
+		IERC20(asset).approve(lendingPool, MAX_INT);
+		_loop(asset, amount, interestRateMode, borrowRatio, loopCount);
+	}
+
+	function _validateLoop(
+		address asset,
+		uint256 borrowRatio,
+		uint256 loopCount
+	) internal view {
 		uint256 _ltv = ltv(asset);
 		require(
 			borrowRatio > 0 && borrowRatio <= _ltv,
 			"Inappropriate borrow rate"
 		);
 		require(loopCount >= 2 && loopCount <= 40, "Inappropriate loop count");
-
-		IERC20(asset).transferFrom(msg.sender, address(this), amount);
-		IERC20(asset).approve(lendingPool, MAX_INT);
-		_loop(asset, amount, interestRateMode, borrowRatio, loopCount);
 	}
 
 	/// @notice Loop the depositing and borrowing on OAS
@@ -65,12 +73,7 @@ contract Leverager is Initializable {
 		uint256 borrowRatio,
 		uint256 loopCount
 	) external payable {
-		uint256 _ltv = ltv(address(woas));
-		require(
-			borrowRatio > 0 && borrowRatio <= _ltv,
-			"Inappropriate borrow rate"
-		);
-		require(loopCount >= 2 && loopCount <= 40, "Inappropriate loop count");
+		_validateLoop(address(woas), borrowRatio, loopCount);
 
 		woas.approve(lendingPool, MAX_INT);
 		woas.deposit{ value: msg.value }();
@@ -107,8 +110,7 @@ contract Leverager is Initializable {
 		(totalCollateral, , availableBorrows, , _ltv, hf) = ILendingPool(
 			lendingPool
 		).getUserAccountData(account);
-		priceOAS = IPriceOracleGetter(0xbB5893E0f744b3d6305D49B1da6bc04fE922AC15)
-			.getAssetPrice(address(woas));
+		priceOAS = priceOracleGetter.getAssetPrice(address(woas));
 		available = availableBorrows * priceOAS;
 	}
 
@@ -139,7 +141,6 @@ contract Leverager is Initializable {
 		uint8 decimal = IERC20(asset).decimals();
 		uint256 reserveUnitPrice = priceOracleGetter.getAssetPrice(asset);
 		uint256 liqThreshold = lt(asset);
-
 		afford =
 			totalCollateral *
 			currentLiquidationThreshold -
@@ -149,21 +150,54 @@ contract Leverager is Initializable {
 			((10 ** (decimal)) * afford) /
 			(reserveUnitPrice * liqThreshold);
 		withdrawAmount = withdrawableCollateral;
-		uint256 healthFactor = getHealthFactor(account, asset, withdrawAmount);
+		GetHealthFactorAfterWithdrawLocalVars
+			memory vars = _getHealthFactorLocalVars(account, asset);
+		uint256 healthFactor = _getHealthFactor(vars, withdrawAmount);
 
 		// The calculated withdrawAmount does not saticfy healthFactor > 1 due to numerical error
 		// The withdrawAmount will be decrease until healthFactor > 1.01
 		while (healthFactor <= (101 * ETH) / 100) {
 			withdrawAmount = (withdrawAmount * 95) / 100; // decrease withdraw amount
-			healthFactor = getHealthFactor(account, asset, withdrawAmount);
+			healthFactor = _getHealthFactor(vars, withdrawAmount);
 		}
 	}
 
-	function getHealthFactor(
-		address account,
-		address asset,
+	struct GetHealthFactorAfterWithdrawLocalVars {
+		uint256 totalCollateral;
+		uint256 totalDebt;
+		uint256 currentLiquidationThreshold;
+		uint8 decimals;
+		uint256 reserveUnitPrice;
+		uint256 liqThreshold;
+	}
+
+	function _getHealthFactor(
+		GetHealthFactorAfterWithdrawLocalVars memory vars,
 		uint256 withdrawAmount
-	) public view returns (uint256 healthFactor) {
+	) internal pure returns (uint256) {
+		uint256 amountETH = (withdrawAmount * vars.reserveUnitPrice) /
+			(10 ** (vars.decimals));
+		(
+			uint256 totalCollateralAfter,
+			uint256 liquidationThresholdAfter
+		) = _calculateAfterWithdraw(
+				vars.totalCollateral,
+				amountETH,
+				vars.currentLiquidationThreshold,
+				vars.liqThreshold
+			);
+
+		return
+			wadDiv(
+				percentMul(totalCollateralAfter, liquidationThresholdAfter),
+				vars.totalDebt
+			);
+	}
+
+	function _getHealthFactorLocalVars(
+		address account,
+		address asset
+	) internal view returns (GetHealthFactorAfterWithdrawLocalVars memory) {
 		(
 			uint256 totalCollateral,
 			uint256 totalDebt,
@@ -177,29 +211,55 @@ contract Leverager is Initializable {
 		uint256 reserveUnitPrice = priceOracleGetter.getAssetPrice(asset);
 		uint256 liqThreshold = lt(asset);
 
-		uint256 totalCollateralAfter;
-		uint256 liquidationThresholdAfter;
-		uint256 amountETH;
-		amountETH = (withdrawAmount * reserveUnitPrice);
-		totalCollateralAfter = (totalCollateral > amountETH)
-			? totalCollateral - amountETH
-			: 0;
+		return
+			GetHealthFactorAfterWithdrawLocalVars(
+				totalCollateral,
+				totalDebt,
+				currentLiquidationThreshold,
+				decimal,
+				reserveUnitPrice,
+				liqThreshold
+			);
+	}
 
-		liquidationThresholdAfter = (totalCollateralAfter != 0 ||
-			(currentLiquidationThreshold *
-				totalCollateral -
-				(liqThreshold * amountETH) /
-				(10 ** decimal)) >=
-			0)
-			? (currentLiquidationThreshold *
-				totalCollateral -
-				((liqThreshold * amountETH) / (10 ** decimal))) / totalCollateralAfter
-			: 0;
+	function getHealthFactor(
+		address account,
+		address asset,
+		uint256 withdrawAmount
+	) public view returns (uint256) {
+		return
+			_getHealthFactor(
+				_getHealthFactorLocalVars(account, asset),
+				withdrawAmount
+			);
+	}
 
-		healthFactor = wadDiv(
-			percentMul(totalCollateralAfter, liquidationThresholdAfter),
-			totalDebt
-		);
+	function _calculateAfterWithdraw(
+		uint256 totalCol,
+		uint256 withdrawAmtEth,
+		uint256 currentUserLiqThreshold,
+		uint256 assetLiqThreshold
+	)
+		internal
+		pure
+		returns (uint256 totalColAfterWithdraw, uint256 liqThresholdAfterWithdraw)
+	{
+		if (totalCol <= withdrawAmtEth) {
+			return (0, 0);
+		}
+		totalColAfterWithdraw = totalCol - withdrawAmtEth;
+		bool thresholdCrossed = currentUserLiqThreshold * totalCol <=
+			assetLiqThreshold * withdrawAmtEth;
+		if (thresholdCrossed) {
+			return (totalColAfterWithdraw, 0);
+		}
+		uint256 numerator = currentUserLiqThreshold *
+			totalCol -
+			assetLiqThreshold *
+			withdrawAmtEth;
+		uint256 denominator = totalColAfterWithdraw;
+
+		return (totalColAfterWithdraw, numerator / denominator);
 	}
 
 	/**
@@ -250,7 +310,7 @@ contract Leverager is Initializable {
 		uint256 withdrawAmount = withdrawableAmount(msg.sender, asset);
 		uint256 repayAmount = IERC20(vdToken).balanceOf(msg.sender);
 		uint256 loopRemains = CLOSE_MAX_LOOPS;
-		while (loopRemains > 0 || withdrawAmount > 0) {
+		while (loopRemains > 0 && withdrawAmount > 0) {
 			if (withdrawAmount > repayAmount) {
 				withdrawAmount = repayAmount;
 				IERC20(lToken).transferFrom(msg.sender, address(this), withdrawAmount);
