@@ -11,6 +11,8 @@ contract Leverager is Initializable {
 	uint16 internal constant LEVERAGE_CODE = 10;
 	uint256 internal constant LTV_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000; // prettier-ignore
 	uint256 internal constant LT_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000; // prettier-ignore
+	uint256 constant DECIMALS_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00FFFFFFFFFFFF; // prettier-ignore
+	uint256 constant RESERVE_DECIMALS_START_BIT_POSITION = 48;
 	uint256 internal constant MAX_INT = 2 ** 256 - 1;
 	uint256 internal constant ETH = 1 ether;
 	uint256 internal constant CLOSE_MAX_LOOPS = 40;
@@ -138,7 +140,10 @@ contract Leverager is Initializable {
 
 		) = ILendingPool(lendingPool).getUserAccountData(account);
 
-		uint8 decimal = IERC20(asset).decimals();
+		uint256 decimal = (ILendingPool(lendingPool)
+			.getReserveData(asset)
+			.configuration
+			.data & ~DECIMALS_MASK) >> RESERVE_DECIMALS_START_BIT_POSITION;
 		uint256 reserveUnitPrice = priceOracleGetter.getAssetPrice(asset);
 		uint256 liqThreshold = lt(asset);
 		afford =
