@@ -47,7 +47,10 @@ contract Leverager is Initializable {
 	) public {
 		_validateLoop(asset, borrowRatio, loopCount);
 
-		IERC20(asset).transferFrom(msg.sender, address(this), amount);
+		require(
+			IERC20(asset).transferFrom(msg.sender, address(this), amount),
+			"Transfer failed"
+		);
 		IERC20(asset).approve(lendingPool, MAX_INT);
 		_loop(asset, amount, interestRateMode, borrowRatio, loopCount);
 	}
@@ -318,7 +321,14 @@ contract Leverager is Initializable {
 		while (loopRemains > 0 && withdrawAmount > 0) {
 			if (withdrawAmount > repayAmount) {
 				withdrawAmount = repayAmount;
-				IERC20(lToken).transferFrom(msg.sender, address(this), withdrawAmount);
+				require(
+					IERC20(lToken).transferFrom(
+						msg.sender,
+						address(this),
+						withdrawAmount
+					),
+					"Transfer failed"
+				);
 				ILendingPool(lendingPool).withdraw(
 					asset,
 					withdrawAmount,
@@ -327,7 +337,14 @@ contract Leverager is Initializable {
 				ILendingPool(lendingPool).repay(asset, withdrawAmount, 2, msg.sender);
 				break;
 			} else {
-				IERC20(lToken).transferFrom(msg.sender, address(this), withdrawAmount);
+				require(
+					IERC20(lToken).transferFrom(
+						msg.sender,
+						address(this),
+						withdrawAmount
+					),
+					"Transfer failed"
+				);
 				ILendingPool(lendingPool).withdraw(
 					asset,
 					withdrawAmount,
